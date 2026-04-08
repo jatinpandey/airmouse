@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>AirMouse</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1a1a24;
+    --surface3: #22222e;
+    --border: #2a2a3a;
+    --accent: #6ee7b7;
+    --accent-dim: rgba(110, 231, 183, 0.15);
+    --accent-glow: rgba(110, 231, 183, 0.3);
+    --text: #e8e8f0;
+    --text-dim: #6b6b80;
+    --danger: #f87171;
+    --danger-dim: rgba(248, 113, 113, 0.15);
+    --blue: #60a5fa;
+    --blue-dim: rgba(96, 165, 250, 0.15);
+    --yellow: #fbbf24;
+  }
+
+  * {
+    margin: 0; padding: 0; box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+
+  html, body {
+    height: 100%; overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    touch-action: none;
+  }
+
+  /* ═══════════════════════════════════════════
+     MAIN APP
+     ═══════════════════════════════════════════ */
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 4px;
+    flex-shrink: 0;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .logo-icon {
+    width: 28px; height: 28px;
+    background: var(--accent-dim);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+
+  .logo-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: 2px;
+    color: var(--accent);
+  }
+
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--danger);
+    transition: background 0.3s;
+  }
+
+  .status-dot.connected {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow);
+    animation: pulse 2s ease infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  /* ── Trackpad ───────────────────────────── */
+  .trackpad-container {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+  }
+
+  .trackpad {
+    width: 100%;
+    height: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .trackpad:active { border-color: var(--accent); }
+
+  .trackpad-grid {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle at center, var(--border) 1px, transparent 1px);
+    background-size: 30px 30px;
+    opacity: 0.3;
+  }
+
+  .trackpad-label {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    opacity: 0.4;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  .touch-indicator {
+    position: absolute;
+    width: 60px; height: 60px;
+    border: 2px solid var(--accent);
+    border-radius: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    pointer-events: none;
+    transition: transform 0.15s ease-out, opacity 0.15s;
+    opacity: 0;
+    box-shadow: 0 0 20px var(--accent-glow);
+  }
+
+  .touch-indicator.active {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+
+  .scroll-strip {
+    position: absolute;
+    right: 0; top: 0; bottom: 0;
+    width: 40px;
+    background: rgba(255,255,255,0.03);
+    border-left: 1px solid var(--border);
+    border-radius: 0 16px 16px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    transition: width 0.05s ease-out;
+  }
+
+  .resize-handle {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 24px;
+    cursor: ew-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    touch-action: none;
+  }
+
+  .resize-handle::before {
+    content: '';
+    width: 4px;
+    height: 32px;
+    border-radius: 2px;
+    background: var(--border);
+    transition: background 0.15s, height 0.15s;
+  }
+
+  .resize-handle:active::before,
+  .resize-handle.dragging::before {
+    background: var(--accent);
+    height: 48px;
+  }
+
+  .scroll-strip-label {
+    writing-mode: vertical-rl;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    opacity: 0.5;
+  }
+
+  .scroll-arrow {
+    font-size: 10px;
+    color: var(--text-dim);
+    opacity: 0.5;
+  }
+
+  /* ── Buttons ────────────────────────────── */
+  .buttons-row {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .btn {
+    flex: 1;
+    height: 60px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .btn:active::before { opacity: 0.1; }
+  .btn:active { transform: scale(0.97); border-color: var(--accent); }
+
+  .btn-icon { font-size: 16px; }
+  .btn-label { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 2px; }
+
+  /* ── Extra row ──────────────────────────── */
+  .extra-row {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .extra-btn {
+    flex: 1;
+    height: 42px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .extra-btn:active {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: scale(0.97);
+  }
+
+  .extra-btn.keyboard-toggle {
+    background: var(--blue-dim);
+    border-color: rgba(96, 165, 250, 0.3);
+    color: var(--blue);
+  }
+
+  .extra-btn.keyboard-toggle.active {
+    background: var(--blue);
+    color: var(--bg);
+  }
+
+  /* ═══════════════════════════════════════════
+     KEYBOARD PANEL
+     ═══════════════════════════════════════════ */
+  .keyboard-panel {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 10px 8px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    transform: translateY(100%);
+    transition: transform 0.3s ease;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .keyboard-panel.open { transform: translateY(0); }
+
+  .kb-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .kb-input-wrapper {
+    flex: 1;
+    position: relative;
+  }
+
+  .kb-input {
+    width: 100%;
+    height: 44px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    font-size: 16px;
+    padding: 0 44px 0 14px;
+    outline: none;
+    caret-color: var(--accent);
+    /* Allow actual keyboard interaction */
+    user-select: text;
+    -webkit-user-select: text;
+    touch-action: auto;
+  }
+
+  .kb-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-dim);
+  }
+
+  .kb-send {
+    position: absolute;
+    right: 4px; top: 4px;
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    color: var(--bg);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.15s;
+  }
+
+  .kb-send:active { opacity: 0.7; }
+
+  .kb-close {
+    width: 44px; height: 44px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-dim);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+
+  .kb-close:active {
+    background: var(--danger-dim);
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+
+  /* Quick-key row inside keyboard panel */
+  .kb-shortcuts {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    touch-action: pan-x;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .kb-key {
+    flex-shrink: 0;
+    height: 36px;
+    padding: 0 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  .kb-key:active {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: scale(0.95);
+  }
+
+  /* ── Overlay ────────────────────────────── */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(10, 10, 15, 0.95);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    z-index: 100;
+    transition: opacity 0.3s;
+  }
+
+  .overlay.hidden { opacity: 0; pointer-events: none; }
+
+  .spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .overlay-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══ MAIN APP ═══ -->
+<div class="app" id="mainApp">
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">🖱️</div>
+      <span class="logo-text">AIRMOUSE</span>
+    </div>
+    <div class="status">
+      <div class="status-dot connected" id="statusDot"></div>
+      <span id="statusText">CONNECTED</span>
+    </div>
+  </div>
+
+  <div class="trackpad-container">
+    <div class="trackpad" id="trackpad">
+      <div class="trackpad-grid"></div>
+      <div class="trackpad-label">trackpad</div>
+      <div class="touch-indicator" id="touchIndicator"></div>
+      <div class="resize-handle" id="resizeHandle"></div>
+      <div class="scroll-strip" id="scrollStrip">
+        <span class="scroll-arrow">▲</span>
+        <span class="scroll-strip-label">scroll</span>
+        <span class="scroll-arrow">▼</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="buttons-row">
+    <button class="btn" id="btnMiddle">
+      <span class="btn-icon">⬡</span>
+      <span class="btn-label">Double</span>
+    </button>
+    <button class="btn" id="btnRight">
+      <span class="btn-icon">👆</span>
+      <span class="btn-label">Right</span>
+    </button>
+  </div>
+
+  <div class="extra-row">
+    <button class="extra-btn" id="btnCmdT">⌘T</button>
+    <button class="extra-btn" id="btnEsc">ESC</button>
+    <button class="extra-btn" id="btnSpace">SPACE</button>
+    <button class="extra-btn" id="btnEnter">ENTER</button>
+    <button class="extra-btn keyboard-toggle" id="btnKeyboard">⌨ TYPE</button>
+  </div>
+</div>
+
+<!-- ═══ KEYBOARD PANEL ═══ -->
+<div class="keyboard-panel" id="keyboardPanel">
+  <div class="kb-header">
+    <div class="kb-input-wrapper">
+      <input class="kb-input" id="kbInput" type="text" placeholder="Type here..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+      <button class="kb-send" id="kbSend">↵</button>
+    </div>
+    <button class="kb-close" id="kbClose">✕</button>
+  </div>
+  <div class="kb-shortcuts">
+    <button class="kb-key" data-action="backspace">⌫ DEL</button>
+    <button class="kb-key" data-action="hotkey" data-keys='["command","c"]'>⌘C</button>
+    <button class="kb-key" data-action="hotkey" data-keys='["command","v"]'>⌘V</button>
+    <button class="kb-key" data-action="hotkey" data-keys='["command","z"]'>⌘Z</button>
+    <button class="kb-key" data-action="hotkey" data-keys='["command","a"]'>⌘A</button>
+    <button class="kb-key" data-action="hotkey" data-keys='["command","s"]'>⌘S</button>
+    <button class="kb-key" data-action="hotkey" data-keys='["command","f"]'>⌘F</button>
+    <button class="kb-key" data-action="hotkey" data-keys='["command","t"]'>⌘T</button>
+    <button class="kb-key" data-action="keypress" data-key="escape">ESC</button>
+    <button class="kb-key" data-action="hotkey" data-keys='["command","space"]'>Spotlight</button>
+    <button class="kb-key" data-action="hotkey" data-keys='["command","tab"]'>⌘TAB</button>
+    <button class="kb-key" data-action="keypress" data-key="up">↑</button>
+    <button class="kb-key" data-action="keypress" data-key="down">↓</button>
+    <button class="kb-key" data-action="keypress" data-key="left">←</button>
+    <button class="kb-key" data-action="keypress" data-key="right">→</button>
+  </div>
+</div>
+
+<!-- ═══ RECONNECT OVERLAY ═══ -->
+<div class="overlay hidden" id="overlay">
+  <div class="spinner"></div>
+  <div class="overlay-text">Reconnecting...</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// WEBSOCKET + AUTH
+// ═══════════════════════════════════════════
+const WS_PORT = 8235;
+const host = window.location.hostname;
+let ws = null;
+let reconnectTimer = null;
+
+function connectWS() {
+  ws = new WebSocket(`ws://${host}:${WS_PORT}`);
+
+  ws.onopen = () => {
+    document.getElementById('overlay').classList.add('hidden');
+    document.getElementById('statusDot').classList.add('connected');
+    document.getElementById('statusText').textContent = 'CONNECTED';
+    if (reconnectTimer) { clearInterval(reconnectTimer); reconnectTimer = null; }
+  };
+
+  ws.onclose = () => {
+    document.getElementById('overlay').classList.remove('hidden');
+    document.getElementById('statusDot').classList.remove('connected');
+    document.getElementById('statusText').textContent = 'OFFLINE';
+    if (!reconnectTimer) {
+      reconnectTimer = setInterval(() => {
+        if (!ws || ws.readyState === WebSocket.CLOSED) connectWS();
+      }, 2000);
+    }
+  };
+
+  ws.onerror = () => ws.close();
+}
+
+function send(data) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(data));
+  }
+}
+
+connectWS();
+
+// ═══════════════════════════════════════════
+// TRACKPAD
+// ═══════════════════════════════════════════
+const trackpad = document.getElementById('trackpad');
+const indicator = document.getElementById('touchIndicator');
+const scrollStrip = document.getElementById('scrollStrip');
+const resizeHandle = document.getElementById('resizeHandle');
+
+let lastTouch = null;
+let isScrolling = false;
+let tapStart = 0;
+let hasMoved = false;
+let lastTapTime = 0;
+
+// ── Scroll strip width (resizable) ──
+let scrollStripWidth = 40;
+const MIN_STRIP = 30;
+const MAX_STRIP_RATIO = 0.7; // max 70% of trackpad width
+
+function applyStripWidth(w) {
+  scrollStripWidth = w;
+  scrollStrip.style.width = w + 'px';
+  resizeHandle.style.right = (w - 12) + 'px'; // center handle on the border
+}
+applyStripWidth(scrollStripWidth);
+
+// ── Resize handle drag ──
+let resizeDrag = null;
+resizeHandle.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  const t = e.touches[0];
+  resizeDrag = { startX: t.clientX, startWidth: scrollStripWidth };
+  resizeHandle.classList.add('dragging');
+}, { passive: false });
+
+resizeHandle.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (!resizeDrag) return;
+  const t = e.touches[0];
+  const dx = resizeDrag.startX - t.clientX; // moving left = wider strip
+  const trackpadRect = trackpad.getBoundingClientRect();
+  const maxW = trackpadRect.width * MAX_STRIP_RATIO;
+  const newW = Math.max(MIN_STRIP, Math.min(maxW, resizeDrag.startWidth + dx));
+  applyStripWidth(newW);
+}, { passive: false });
+
+resizeHandle.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  resizeDrag = null;
+  resizeHandle.classList.remove('dragging');
+}, { passive: false });
+
+// ── Scroll zone detection ──
+function isInScrollZone(x) {
+  const rect = trackpad.getBoundingClientRect();
+  return x > rect.right - scrollStripWidth - 12; // 12px grace for handle
+}
+
+// ── Velocity-based scroll ──
+let scrollOriginY = 0;
+let scrollVelocity = 0;
+let scrollAccum = 0; // accumulate fractional scroll
+let scrollRAF = null;
+const SCROLL_VELOCITY_SCALE = 0.02; // tune: px distance → scroll speed
+
+function scrollTick() {
+  if (scrollVelocity !== 0) {
+    scrollAccum += scrollVelocity;
+    const whole = Math.trunc(scrollAccum);
+    if (whole !== 0) {
+      send({ action: 'scroll_smooth', velocity: whole });
+      scrollAccum -= whole;
+    }
+  }
+  if (isScrolling) {
+    scrollRAF = requestAnimationFrame(scrollTick);
+  }
+}
+
+function startScrollLoop() {
+  if (scrollRAF) cancelAnimationFrame(scrollRAF);
+  scrollRAF = requestAnimationFrame(scrollTick);
+}
+
+function stopScrollLoop() {
+  scrollVelocity = 0;
+  if (scrollRAF) { cancelAnimationFrame(scrollRAF); scrollRAF = null; }
+}
+
+// ── Trackpad touch handlers ──
+trackpad.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  const t = e.touches[0];
+  lastTouch = { x: t.clientX, y: t.clientY };
+  tapStart = Date.now();
+  hasMoved = false;
+  isScrolling = isInScrollZone(t.clientX);
+
+  if (isScrolling) {
+    scrollOriginY = t.clientY;
+    scrollVelocity = 0;
+    scrollAccum = 0;
+    startScrollLoop();
+  }
+
+  const rect = trackpad.getBoundingClientRect();
+  indicator.style.left = (t.clientX - rect.left) + 'px';
+  indicator.style.top = (t.clientY - rect.top) + 'px';
+  indicator.classList.add('active');
+}, { passive: false });
+
+trackpad.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  const t = e.touches[0];
+  if (!lastTouch) return;
+
+  const dx = t.clientX - lastTouch.x;
+  const dy = t.clientY - lastTouch.y;
+  if (Math.abs(dx) > 1 || Math.abs(dy) > 1) hasMoved = true;
+
+  if (isScrolling) {
+    // Velocity = distance from origin point (positive = scroll down)
+    const distance = t.clientY - scrollOriginY;
+    scrollVelocity = distance * SCROLL_VELOCITY_SCALE;
+  } else {
+    send({ action: 'move', dx, dy });
+    lastTouch = { x: t.clientX, y: t.clientY };
+  }
+
+  const rect = trackpad.getBoundingClientRect();
+  indicator.style.left = (t.clientX - rect.left) + 'px';
+  indicator.style.top = (t.clientY - rect.top) + 'px';
+}, { passive: false });
+
+trackpad.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  indicator.classList.remove('active');
+
+  if (isScrolling) {
+    stopScrollLoop();
+  }
+
+  const elapsed = Date.now() - tapStart;
+  if (!hasMoved && elapsed < 250) {
+    const now = Date.now();
+    if (now - lastTapTime < 300) {
+      send({ action: 'doubleclick' });
+      lastTapTime = 0;
+    } else {
+      send({ action: 'click', button: 'left' });
+      lastTapTime = now;
+    }
+    indicator.classList.add('active');
+    setTimeout(() => indicator.classList.remove('active'), 150);
+  }
+
+  lastTouch = null;
+  isScrolling = false;
+}, { passive: false });
+
+// ═══════════════════════════════════════════
+// BUTTONS
+// ═══════════════════════════════════════════
+document.getElementById('btnCmdT').addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  send({ action: 'hotkey', keys: ['command', 't'] });
+});
+
+document.getElementById('btnRight').addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  send({ action: 'rightclick' });
+});
+
+document.getElementById('btnMiddle').addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  send({ action: 'doubleclick' });
+});
+
+document.getElementById('btnEsc').addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  send({ action: 'keypress', key: 'escape' });
+});
+
+document.getElementById('btnSpace').addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  send({ action: 'keypress', key: 'space' });
+});
+
+document.getElementById('btnEnter').addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  send({ action: 'keypress', key: 'enter' });
+});
+
+// ═══════════════════════════════════════════
+// KEYBOARD PANEL
+// ═══════════════════════════════════════════
+const kbPanel = document.getElementById('keyboardPanel');
+const kbInput = document.getElementById('kbInput');
+const kbToggle = document.getElementById('btnKeyboard');
+let kbOpen = false;
+
+function toggleKeyboard() {
+  kbOpen = !kbOpen;
+  kbPanel.classList.toggle('open', kbOpen);
+  kbToggle.classList.toggle('active', kbOpen);
+  if (kbOpen) {
+    // Focus immediately in the same user gesture so mobile browsers open the keyboard
+    seedInput();
+    kbInput.focus();
+  } else {
+    kbInput.blur();
+  }
+}
+
+kbToggle.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  toggleKeyboard();
+});
+
+document.getElementById('kbClose').addEventListener('click', () => {
+  kbOpen = true; // will be toggled to false
+  toggleKeyboard();
+});
+
+// Send typed text on Enter or Send button
+function sendTypedText() {
+  const text = kbInput.value;
+  if (text) {
+    send({ action: 'typetext', text });
+    kbInput.value = '';
+  }
+}
+
+document.getElementById('kbSend').addEventListener('click', (e) => {
+  e.preventDefault();
+  sendTypedText();
+  kbInput.focus();
+});
+
+kbInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    sendTypedText();
+  }
+});
+
+// Real-time typing mode: each character typed is sent immediately
+// and cleared from the input, so the phone keyboard acts as a direct pipe
+let realtimeTyping = true;
+
+// Use a zero-width space as a seed so backspace always has something to delete
+const SEED = '\u200B';
+function seedInput() {
+  kbInput.value = SEED;
+  kbInput.setSelectionRange(SEED.length, SEED.length);
+}
+
+kbInput.addEventListener('input', (e) => {
+  if (!realtimeTyping) return;
+  if (kbInput.value === '') {
+    // Seed was deleted = backspace pressed
+    send({ action: 'backspace', count: 1 });
+    seedInput();
+    return;
+  }
+  const text = kbInput.value.replace(/\u200B/g, '');
+  if (text) {
+    send({ action: 'typetext', text });
+  }
+  seedInput();
+});
+
+// Shortcut keys in keyboard panel
+document.querySelectorAll('.kb-key').forEach(key => {
+  let kbKeyStart = null;
+  key.addEventListener('touchstart', (e) => {
+    kbKeyStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }, { passive: true });
+  key.addEventListener('touchend', (e) => {
+    if (!kbKeyStart) return;
+    const t = e.changedTouches[0];
+    const dx = Math.abs(t.clientX - kbKeyStart.x);
+    const dy = Math.abs(t.clientY - kbKeyStart.y);
+    kbKeyStart = null;
+    if (dx > 10 || dy > 10) return; // was a swipe, not a tap
+    e.preventDefault();
+    const action = key.dataset.action;
+    if (action === 'backspace') {
+      send({ action: 'backspace', count: 1 });
+    } else if (action === 'hotkey') {
+      const keys = JSON.parse(key.dataset.keys);
+      send({ action: 'hotkey', keys });
+    } else if (action === 'keypress') {
+      send({ action: 'keypress', key: key.dataset.key });
+    }
+  });
+});
+
+// Prevent body scroll when keyboard is open
+document.addEventListener('touchmove', (e) => {
+  if (!e.target.closest('.keyboard-panel') && !e.target.closest('.auth-screen')) {
+    e.preventDefault();
+  }
+}, { passive: false });
+</script>
+
+</body>
+</html>
