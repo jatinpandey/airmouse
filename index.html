@@ -460,6 +460,82 @@
 
   .overlay.hidden { opacity: 0; pointer-events: none; }
 
+  /* ── PIN Auth Screen ───────────────────── */
+  .auth-screen {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    z-index: 200;
+    transition: opacity 0.3s;
+  }
+
+  .auth-screen.hidden { opacity: 0; pointer-events: none; }
+
+  .auth-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .pin-inputs {
+    display: flex;
+    gap: 12px;
+  }
+
+  .pin-digit {
+    width: 52px; height: 64px;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    text-align: center;
+    outline: none;
+    caret-color: var(--accent);
+    transition: border-color 0.15s;
+    -webkit-user-select: text;
+    user-select: text;
+    touch-action: auto;
+  }
+
+  .pin-digit:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-dim);
+  }
+
+  .pin-digit.error {
+    border-color: var(--danger);
+    animation: shake 0.3s ease;
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+  }
+
+  .auth-hint {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.6;
+  }
+
+  .auth-error {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--danger);
+    height: 16px;
+  }
+
   .spinner {
     width: 32px; height: 32px;
     border: 3px solid var(--border);
@@ -522,7 +598,7 @@
     <button class="extra-btn" id="btnEsc">ESC</button>
     <button class="extra-btn" id="btnSpace">SPACE</button>
     <button class="extra-btn" id="btnEnter">ENTER</button>
-    <button class="extra-btn keyboard-toggle" id="btnKeyboard">⌨ TYPE</button>
+    <button class="extra-btn keyboard-toggle" id="btnKeyboard">KEYBOARD</button>
   </div>
 </div>
 
@@ -554,6 +630,23 @@
   </div>
 </div>
 
+<!-- ═══ PIN AUTH SCREEN ═══ -->
+<div class="auth-screen" id="authScreen">
+  <div class="logo">
+    <div class="logo-icon">🖱️</div>
+    <span class="logo-text">AIRMOUSE</span>
+  </div>
+  <div class="auth-title">Enter PIN from terminal</div>
+  <div class="pin-inputs" id="pinInputs">
+    <input class="pin-digit" type="tel" maxlength="1" inputmode="numeric" autocomplete="off">
+    <input class="pin-digit" type="tel" maxlength="1" inputmode="numeric" autocomplete="off">
+    <input class="pin-digit" type="tel" maxlength="1" inputmode="numeric" autocomplete="off">
+    <input class="pin-digit" type="tel" maxlength="1" inputmode="numeric" autocomplete="off">
+  </div>
+  <div class="auth-error" id="authError"></div>
+  <div class="auth-hint">Check your terminal for the 4-digit PIN</div>
+</div>
+
 <!-- ═══ RECONNECT OVERLAY ═══ -->
 <div class="overlay hidden" id="overlay">
   <div class="spinner"></div>
@@ -568,21 +661,57 @@ const WS_PORT = 8235;
 const host = window.location.hostname;
 let ws = null;
 let reconnectTimer = null;
+let authenticated = false;
+
+const authScreen = document.getElementById('authScreen');
+const mainApp = document.getElementById('mainApp');
+const authError = document.getElementById('authError');
+const pinDigits = document.querySelectorAll('.pin-digit');
+
+// Hide main app until authed
+mainApp.style.display = 'none';
 
 function connectWS() {
   ws = new WebSocket(`ws://${host}:${WS_PORT}`);
 
   ws.onopen = () => {
     document.getElementById('overlay').classList.add('hidden');
-    document.getElementById('statusDot').classList.add('connected');
-    document.getElementById('statusText').textContent = 'CONNECTED';
+    if (authenticated) {
+      // Re-auth on reconnect
+      ws.send(JSON.stringify({ action: 'auth', pin: sessionStorage.getItem('airmouse_pin') }));
+    } else {
+      // Focus first PIN digit
+      pinDigits[0].focus();
+    }
     if (reconnectTimer) { clearInterval(reconnectTimer); reconnectTimer = null; }
   };
 
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.action === 'auth') {
+        if (msg.ok) {
+          authenticated = true;
+          authScreen.classList.add('hidden');
+          mainApp.style.display = '';
+          document.getElementById('statusDot').classList.add('connected');
+          document.getElementById('statusText').textContent = 'CONNECTED';
+        } else {
+          authError.textContent = 'Wrong PIN';
+          pinDigits.forEach(d => { d.value = ''; d.classList.add('error'); });
+          setTimeout(() => pinDigits.forEach(d => d.classList.remove('error')), 400);
+          pinDigits[0].focus();
+        }
+      }
+    } catch {}
+  };
+
   ws.onclose = () => {
-    document.getElementById('overlay').classList.remove('hidden');
     document.getElementById('statusDot').classList.remove('connected');
     document.getElementById('statusText').textContent = 'OFFLINE';
+    if (authenticated) {
+      document.getElementById('overlay').classList.remove('hidden');
+    }
     if (!reconnectTimer) {
       reconnectTimer = setInterval(() => {
         if (!ws || ws.readyState === WebSocket.CLOSED) connectWS();
@@ -594,10 +723,32 @@ function connectWS() {
 }
 
 function send(data) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
+  if (ws && ws.readyState === WebSocket.OPEN && authenticated) {
     ws.send(JSON.stringify(data));
   }
 }
+
+// ── PIN input handling ──
+pinDigits.forEach((digit, i) => {
+  digit.addEventListener('input', () => {
+    authError.textContent = '';
+    digit.value = digit.value.replace(/\D/g, '').slice(-1);
+    if (digit.value && i < pinDigits.length - 1) {
+      pinDigits[i + 1].focus();
+    }
+    // Auto-submit when all 4 filled
+    const pin = Array.from(pinDigits).map(d => d.value).join('');
+    if (pin.length === 4) {
+      sessionStorage.setItem('airmouse_pin', pin);
+      ws.send(JSON.stringify({ action: 'auth', pin }));
+    }
+  });
+  digit.addEventListener('keydown', (e) => {
+    if (e.key === 'Backspace' && !digit.value && i > 0) {
+      pinDigits[i - 1].focus();
+    }
+  });
+});
 
 connectWS();
 

@@ -40,12 +40,16 @@ except ImportError:
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import threading
 import platform
+import random
 
 # ── Config ──────────────────────────────────────────────────────────
 HTTP_PORT = 8234
 WS_PORT = 8235
 SENSITIVITY = 1.8
 SCROLL_SENSITIVITY = 0.5
+
+# ── Auth ───────────────────────────────────────────────────────────
+PIN = f"{random.randint(0, 9999):04d}"
 
 pyautogui.FAILSAFE = False
 pyautogui.PAUSE = 0
@@ -132,12 +136,28 @@ async def handle_client(websocket):
     client_id = id(websocket)
     addr = websocket.remote_address
     print(f"📱 New connection from {addr}")
+    authenticated = False
 
     try:
         async for message in websocket:
             try:
                 data = json.loads(message)
                 action = data.get("action")
+
+                # ── Auth gate ──────────────────────────────
+                if action == "auth":
+                    if data.get("pin") == PIN:
+                        authenticated = True
+                        await websocket.send(json.dumps({"action": "auth", "ok": True}))
+                        print(f"✅ Authenticated: {addr}")
+                    else:
+                        await websocket.send(json.dumps({"action": "auth", "ok": False}))
+                        print(f"❌ Bad PIN from {addr}")
+                    continue
+
+                if not authenticated:
+                    await websocket.send(json.dumps({"action": "auth", "ok": False, "msg": "not authenticated"}))
+                    continue
 
                 # ── Mouse ───────────────────────────────────
                 if action == "move":
@@ -229,7 +249,7 @@ def main():
     print("╠══════════════════════════════════════════════╣")
     print(f"║  Open on phone: {url:<29}║")
     print(f"║  WebSocket:     {ws_url:<29}║")
-    print("╠══════════════════════════════════════════════╣")
+    print(f"║  PIN:           {PIN:<29}║")
     print("╠══════════════════════════════════════════════╣")
     print("║  Both devices must be on the same WiFi!      ║")
     print("╚══════════════════════════════════════════════╝")
