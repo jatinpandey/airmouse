@@ -49,7 +49,9 @@ SENSITIVITY = 1.8
 SCROLL_SENSITIVITY = 0.5
 
 # ── Auth ───────────────────────────────────────────────────────────
-PIN = f"{random.randint(0, 9999):04d}"
+# Set AIRMOUSE_PIN env var for a persistent PIN; otherwise a fresh random
+# 4-digit PIN is generated on each startup.
+PIN = os.environ.get("AIRMOUSE_PIN") or f"{random.randint(0, 9999):04d}"
 
 pyautogui.FAILSAFE = False
 pyautogui.PAUSE = 0
